@@ -1,4 +1,4 @@
-# !/usr/bin/env python2
+# !/usr/bin/env python3
 
 """A shell interface to the Turbine 'R' package
 
@@ -6,12 +6,19 @@ Uses argparse to handle runtime arguments passed by the user and then wraps call
 commonly deployed on unix systems (Linux / macOS)
 """
 
+import sys
+import os
+
 import argparse
 import subprocess
 
 from gee_asset_manager.batch_remover import delete
 from gee_asset_manager.batch_uploader import upload
 from gee_asset_manager.config import setup_logging
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class ee_ingest:
     def __init__(self, *args):
@@ -22,10 +29,12 @@ class ee_ingest:
         except Exception as e:
             raise e
         # call-out built-in method for our upload task
-        self.run_upload_task()
+        self.upload()
 
-    def upload(self, *args):
-        upload(user=args.user,
+    def upload(self, *args, **kwargs):
+        if args:
+            kwargs = args[0]
+        upload(user=kwargs.user,
             source_path=self._filename,
             destination_path=self._asset_id,
             metadata_path=None,
@@ -35,22 +44,44 @@ class ee_ingest:
             band_names=None)
 
 class Run:
-    def __init__(self, *args):
+    def __init__(self, r_path=None, r_script_path=None, *args):
         """Creates an 'R' launcher task with optional parameters specifying \
         the path of our local Rscript binary and the script and arguments we \
         intend to run
 
         Optional arguments:
-        :param r_script_path: full path to the local Rscript binary
-        :param src_path: full path to the R source script we intend to run
+        :param r_path: full path to the local Rscript binary
+        :param r_script_path: full path to the R source script we intend to run
         """
-        self._r_script_path = None
-        self._src_path = None
+        if args:
+            # always assume dictionary imput if our arguments are undefined
+            _kwargs = args[0] 
+            self.r_path = _kwargs.get('r_path', None)
+            self.r_script_path = _kwargs.get('r_script_path', None)
 
+        self.r_path = r_path
+        self.r_script_path = r_script_path
+
+    @property
+    def r_path(self):
+        """Get the full path to the R script binary path we are going to use for running our R code"""
+        return self._R_PATH
+
+    @r_path.setter
+    def r_path(self, *args):
+        """Set the full r_path we are going to use
+        Optional arguments:
+        :arg: full path to the local Rscript binary
+        """
+        if(os.path.exists(args[0])):
+            self._R_PATH = args[0]
+        else:
+            logger.DEBUG("The system path to 'R' was not found.")
+            raise FileNotFoundError()
     @property
     def script_path(self):
         """Get the full path to the R script binary path we are going to use for running our R code"""
-        return self._script_path
+        return self._R_SCRIPT_PATH
 
     @script_path.setter
     def script_path(self, *args):
@@ -58,16 +89,7 @@ class Run:
         Optional arguments:
         :arg: full path to the local Rscript binary
         """
-        self._script_path = args[0]
-
-    @property
-    def workspace_path(self):
-        """Get the full path to the R script we are going to run for this session"""
-        return self._src_path
-
-    @workspace_path.setter
-    def workspace_path(self, *args):
-        """Set the full path to the R script we are going to run for this session"""
+        self._R_SCRIPT_PATH = args[0]
 
     def run(self):
         """ call Rscript on a user-specified script path and poll the run """
