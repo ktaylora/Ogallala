@@ -30,7 +30,7 @@ parse_url <- function (x = NULL, pattern = NULL)
 #' scrape the national elevation dataset (using FedData) to fetch and merge
 #' surface elevation DEMs for our region
 #' @export
-scrapeNed <- function(s=NULL){
+scrape_ned <- function(s=NULL){
   if(dir.exists("RAW")){
     unlink("RAW",recursive=T, force=T)
   }
@@ -44,7 +44,7 @@ scrapeNed <- function(s=NULL){
 #' webscrape functionality for the hp aquifer boundary contour provided by USGS.
 #' Returns a full pathname to the zipfile containing the boundary (ESRI Shapefile).
 #' @export
-scrapeHighPlainsAquiferBoundary <- function(base_url="https://water.usgs.gov/GIS/metadata/usgswrd/XML/ds543.xml"){
+scrape_high_plains_aquifer_boundary <- function(base_url="https://water.usgs.gov/GIS/metadata/usgswrd/XML/ds543.xml"){
   if(!dir.exists("boundaries")){
     dir.create("boundaries")
   }
@@ -60,7 +60,7 @@ scrapeHighPlainsAquiferBoundary <- function(base_url="https://water.usgs.gov/GIS
 }
 #' scrape well-point water data from the USGS portal
 #' @export
-scrapeWellPointData <- function( base_url="https://ne.water.usgs.gov/projects/HPA/", years=1995:(as.numeric(format(Sys.time(), "%Y"))) ){
+scrape_well_point_data <- function( base_url="https://ne.water.usgs.gov/projects/HPA/", years=1995:(as.numeric(format(Sys.time(), "%Y"))), quiet=T){
   hrefs <- Ogallala:::parse_hrefs(paste(base_url,"data.html",sep=""))
   hrefs <- Ogallala:::grep_by(hrefs, pattern="WL_ALL_")
   hrefs <- Ogallala:::grep_by(hrefs, pattern=paste(years, collapse="|"))
@@ -71,21 +71,21 @@ scrapeWellPointData <- function( base_url="https://ne.water.usgs.gov/projects/HP
   }
   # define the zips we will fetch and the zips we already have
   zip_names <-  unlist(lapply(strsplit(hrefs,split="/"), FUN=function(x) x[length(x)]))
-  toGet <- paste("https://ne.water.usgs.gov/projects/HPA/",hrefs,sep="")
-  existingZips <- list.files("well_point_data",pattern="^WL_ALL_.*.zip$")
-    existingZips <- existingZips[grepl(existingZips,pattern=paste(years,collapse="|"))]
+  to_get <- paste("https://ne.water.usgs.gov/projects/HPA/",hrefs,sep="")
+  existing_zips <- list.files("well_point_data",pattern="^WL_ALL_.*.zip$")
+    existing_zips <- existing_zips[grepl(existing_zips,pattern=paste(years,collapse="|"))]
   # fetch any well point zips we don't already have
-  if(length(existingZips) < length(toGet)){
-    if(length(existingZips)>0){
-      for(i in 1:length(existingZips)){
-        toGet <- toGet[which(!grepl(toGet,pattern=existingZips[i]))]
+  if(length(existing_zips) < length(to_get)){
+    if(length(existing_zips)>0){
+      for(i in 1:length(existing_zips)){
+        to_get <- to_get[which(!grepl(to_get,pattern=existing_zips[i]))]
+        zip_names <- zip_names[which(!grepl(zip_names,pattern=existing_zips[i]))]
       }
     }
-    for(i in 1:length(toGet)){
-      utils::download.file(toGet[i],destfile=paste("well_point_data",
+    for(i in 1:length(to_get)){
+      utils::download.file(to_get[i],destfile=paste("well_point_data",
                                                    zip_names[i],sep="/"),
-                                                   quiet=T);
-      cat('.')
+                                                   quiet=quiet);
     }
   }
   ret <- list.files("well_point_data",pattern="^WL_ALL_.*.zip$",full.names=T)
@@ -96,7 +96,7 @@ scrapeWellPointData <- function( base_url="https://ne.water.usgs.gov/projects/HP
 #' scrape aquifer base elevation data
 #  see: https://water.usgs.gov/GIS/metadata/usgswrd/XML/ofr98-393_aqbase.xml
 #  note: [ELEV] field : base of aquifer elevation is in feet, not meters
-scrapeBaseElevation <- function(base_url="https://water.usgs.gov/GIS/metadata/usgswrd/XML/ofr98-393_aqbase.xml"){
+scrap_base_elevation <- function(base_url="https://water.usgs.gov/GIS/metadata/usgswrd/XML/ofr98-393_aqbase.xml"){
   hrefs <- xml2::read_html(base_url)
   hrefs <- rvest::xml_nodes(hrefs,"networkr")
   hrefs <- hrefs[grepl(hrefs,pattern="e00")]
@@ -106,7 +106,7 @@ scrapeBaseElevation <- function(base_url="https://water.usgs.gov/GIS/metadata/us
 #' scrape polygon features for areas reported to contain little-or-no saturated
 #' thickness that lack well data and are thus not captured in the HP Water
 #' Monitoring study.
-scrapeUnsampledZeroValues <- function(base_url="https://water.usgs.gov/GIS/metadata/usgswrd/XML/ofr99-266.xml"){
+scrape_unsampled_zero_values <- function(base_url="https://water.usgs.gov/GIS/metadata/usgswrd/XML/ofr99-266.xml"){
   hrefs <- xml2::read_html(base_url)
   hrefs <- rvest::xml_nodes(hrefs,"networkr")
   hrefs <- hrefs[grepl(hrefs,pattern="e00")]
@@ -114,7 +114,7 @@ scrapeUnsampledZeroValues <- function(base_url="https://water.usgs.gov/GIS/metad
   download.file(hrefs,destfile="ofr99-266.e00.gz")
 }
 #' unpack a ofr99-266 vector dataset 
-unpackUnsampledZeroValues <- function(x="ofr99-266.e00"){
+unpack_unsampled_zero_values <- function(x="ofr99-266.e00"){
   x = list.files(".",pattern=x)[1]
   if(!file.exists(x)) stop("couldn't find aquifer base elevation contour data in cwd. use a better x= argument")
   if(grepl(x,pattern="gz")) R.utils::gunzip(x,overwrite=T)
@@ -123,7 +123,7 @@ unpackUnsampledZeroValues <- function(x="ofr99-266.e00"){
 }
 #' hidden function that unpacks and processes well point data, returning to
 #' user as CSV
-unpackWellPointData <- function(x=NULL){
+unpack_well_point_data <- function(x=NULL){
   default_projection <- "+proj=longlat +datum=NAD83 +no_defs" # strange projection (proj will figure it out)
   unpack_file <- function(x){
     f <- utils::unzip(x,list=T)[,1]; # get a file listing
@@ -143,7 +143,7 @@ unpackWellPointData <- function(x=NULL){
 }
 #' unpack base elevation data
 #' @export
-unpackBaseElevation <- function(x="ofr98-393.e00"){
+unpack_base_elevation <- function(x="ofr98-393.e00"){
   x = list.files(".",pattern=x)[1]
   if(!file.exists(x)) stop("couldn't find aquifer base elevation contour data in cwd. use a better x= argument")
   if(grepl(x,pattern="gz")) R.utils::gunzip(x,overwrite=T)
@@ -153,7 +153,7 @@ unpackBaseElevation <- function(x="ofr98-393.e00"){
 #' unpack aquifer boundary data from a zipped ESRI shapefile, as returned by
 #' scrapeHighPlainsAquiferBoundary()
 #' @export
-unpackHighPlainsAquiferBoundary <- function(x="ds543.zip"){
+unpack_high_plains_aquifer_boundary <- function(x="ds543.zip"){
   x <- file.path(list.files(".",pattern="ds543.zip",recursive=T))
   if(!file.exists(x)) stop("couldn't find high plains boundary contour data in cwd. use a better x= argument")
   f <- utils::unzip(x,list=T,)[1,1];        # get a file listing

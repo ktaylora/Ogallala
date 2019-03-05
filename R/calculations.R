@@ -2,6 +2,7 @@
 feet_to_meters <- function(x) x*0.3048
 #' hidden function for meters -> feet
 meters_to_feet <- function(x) x*3.28084
+logit <- function(x) round( log( x / (1 - x) ), 2)
 #' generate a universal grid at the target resolution (500m) originally specified
 #' by V. McGuire and others for their interpolation.
 generate_target_raster_grid <- function(s=NULL) {
@@ -104,7 +105,7 @@ generate_zero_burnin_surface <- function(r=NULL, width=500){
     values(target) <- 1
   # define our "zero" mask, with some arbitrary wiggle-room
   no_thickness_boundary <- rgeos::gPolygonize(
-    Ogallala:::unpackUnsampledZeroValues())
+    Ogallala:::unpack_unsampled_zero_values())
   no_thickness_boundary <- rgeos::gBuffer(no_thickness_boundary,
     byid=F,width=width*2)
   surface <- rgeos::gBuffer(no_thickness_boundary,byid=F,width=0)
@@ -142,7 +143,7 @@ generate_aquifer_boundary_buffer <- function(boundary=NULL, width=5000){
 }
 #' downsample well points that occur along the aquifer boundary
 downsample_aquifer_boundary <- function(wellPoints=NULL, boundary=NULL, width=3000){
-  buffer <- spTransform(Ogallala:::generateAquiferBoundaryBuffer(boundary, width=width),
+  buffer <- spTransform(Ogallala:::generate_aquifer_boundary_buffer(boundary, width=width),
     CRS(projection(wellPoints)))
   over <- !is.na(as.vector(sp::over(wellPoints, buffer)))
   cat(" -- downsampling",sum(over),
@@ -152,12 +153,12 @@ downsample_aquifer_boundary <- function(wellPoints=NULL, boundary=NULL, width=30
 #' download the ofr99-266 dry areas dataset and randomly generate points
 #' within the polygon features to use as pseudo-zero sat. thickness data
 generate_pseudo_zeros <- function(wellPts=NULL, targetRasterGrid=NULL, size=NULL){
-  no_thickness_boundary <- rgeos::gPolygonize(Ogallala:::unpackUnsampledZeroValues())
+  no_thickness_boundary <- rgeos::gPolygonize(Ogallala:::unpack_unsampled_zero_values())
   if(is.null(size)){
     # do an area-weighted sampling to figure out point sample size
     # appropriate for our point generation
-    region_area <- Ogallala:::scrapeHighPlainsAquiferBoundary()
-       region_area <- Ogallala:::unpackHighPlainsAquiferBoundary(region_area)
+    region_area <- Ogallala:::scrape_high_plains_aquifer_boundary()
+       region_area <- Ogallala:::unpack_high_plains_aquifer_boundary(region_area)
     region_area <- rgeos::gArea(region_area[
                      region_area$AQUIFER ==
                        unique(region_area$AQUIFER)[1],])
@@ -277,7 +278,7 @@ m_knn_weights <- function(pts, order=4, field=NULL, k=5){
 }
 #' testing for a standard GLM with polynomial terms on latitude
 #' and longitude
-m_spatial_trend <- function(pts, order=2, field=NULL){
+m_glm_spatial_trend <- function(pts, order=2, field=NULL){
   t <- cbind(pts@data[,field], pts@coords, pts$surface_elevation, pts$base_elevation)
     colnames(t) <- c(field,"longitude","latitude","surf_elev","base_elev")
       t <- data.frame(t)
@@ -285,6 +286,21 @@ m_spatial_trend <- function(pts, order=2, field=NULL){
     covs <- paste(covs,collapse="+")
       formula <- as.formula(paste(field,"~",covs,collapse=""))
   return(glm(formula,data=na.omit(t)))
+}
+m_rf_logistic_trend <- function(pts, fields=c('year')){
+    t <- cbind(
+      pts@data[,fields], 
+      pts@coords, 
+      pts$surface_elevation, 
+      pts$base_elevation
+    )
+    colnames(t) <- c(fields,"longitude","latitude","surf_elev","base_elev")
+      t <- data.frame(t)
+    
+    covs <- paste("poly(",colnames(t)[2:ncol(t)],",", order, ")",sep="")
+    covs <- paste(covs,collapse="+")
+    
+    formula <- as.formula(paste(field,"~",covs,collapse=""))
 }
 #' fit a higher-order GLM to our spatial data and a field of your choice
 #' and use it to generate a polynomial trend raster surface of that field
@@ -301,8 +317,8 @@ calc_polynomial_trend_surface <- function(pts, order=3,
     # if we are missing predictors, are they latitude and longitude?
     if(sum(c("longitude","latitude") %in% names(predRaster)) < 2){
       cat(" -- calculating latitude and longitude\n")
-      predRaster$latitude  <- init(predRaster,"y")
-      predRaster$longitude <- init(predRaster,"x")
+      predRaster$latitude  <- raster::init(predRaster,"y")
+      predRaster$longitude <- raster::init(predRaster,"x")
     }
     cat(" -- projecting across regional extent:\n")
     polynomial_trend <- raster::predict(predRaster,m,progress='text',type="response")
